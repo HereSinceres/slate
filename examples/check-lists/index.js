@@ -1,8 +1,17 @@
+import React from 'react'
 import { Editor } from 'slate-react'
 import { Value } from 'slate'
+import { css } from 'emotion'
 
-import React from 'react'
-import initialValue from './value.json'
+import initialValueAsJson from './value.json'
+
+/**
+ * Deserialize the initial editor value.
+ *
+ * @type {Object}
+ */
+
+const initialValue = Value.fromJSON(initialValueAsJson)
 
 /**
  * Check list item.
@@ -20,7 +29,7 @@ class CheckListItem extends React.Component {
   onChange = event => {
     const checked = event.target.checked
     const { editor, node } = this.props
-    editor.change(c => c.setNodeByKey(node.key, { data: { checked } }))
+    editor.setNodeByKey(node.key, { data: { checked } })
   }
 
   /**
@@ -31,18 +40,42 @@ class CheckListItem extends React.Component {
    */
 
   render() {
-    const { attributes, children, node } = this.props
+    const { attributes, children, node, readOnly } = this.props
     const checked = node.data.get('checked')
     return (
       <div
-        className={`check-list-item ${checked ? 'checked' : ''}`}
-        contentEditable={false}
         {...attributes}
+        className={css`
+          display: flex;
+          flex-direction: row;
+          align-items: center;
+
+          & + & {
+            margin-top: 0;
+          }
+        `}
       >
-        <span>
+        <span
+          contentEditable={false}
+          className={css`
+            margin-right: 0.75em;
+          `}
+        >
           <input type="checkbox" checked={checked} onChange={this.onChange} />
         </span>
-        <span contentEditable suppressContentEditableWarning>
+        <span
+          contentEditable={!readOnly}
+          suppressContentEditableWarning
+          className={css`
+            flex: 1;
+            opacity: ${checked ? 0.666 : 1};
+            text-decoration: ${checked ? 'none' : 'line-through'};
+
+            &:focus {
+              outline: none;
+            }
+          `}
+        >
           {children}
         </span>
       </div>
@@ -58,23 +91,37 @@ class CheckListItem extends React.Component {
 
 class CheckLists extends React.Component {
   /**
-   * Deserialize the initial editor value.
+   * Render.
    *
-   * @type {Object}
+   * @return {Element}
    */
 
-  state = {
-    value: Value.fromJSON(initialValue),
+  render() {
+    return (
+      <Editor
+        spellCheck
+        placeholder="Get to work..."
+        defaultValue={initialValue}
+        onKeyDown={this.onKeyDown}
+        renderBlock={this.renderBlock}
+      />
+    )
   }
 
   /**
-   * On change, save the new value.
+   * Render a Slate block.
    *
-   * @param {Change} change
+   * @param {Object} props
+   * @return {Element}
    */
 
-  onChange = ({ value }) => {
-    this.setState({ value })
+  renderBlock = (props, editor, next) => {
+    switch (props.node.type) {
+      case 'check-list-item':
+        return <CheckListItem {...props} />
+      default:
+        return next()
+    }
   }
 
   /**
@@ -87,64 +134,29 @@ class CheckLists extends React.Component {
    * then turn it back into a paragraph.
    *
    * @param {Event} event
-   * @param {Change} change
-   * @return {Value|Void}
+   * @param {Editor} editor
+   * @param {Function} next
    */
 
-  onKeyDown = (event, change) => {
-    const { value } = change
+  onKeyDown = (event, editor, next) => {
+    const { value } = editor
 
-    if (event.key == 'Enter' && value.startBlock.type == 'check-list-item') {
-      change.splitBlock().setBlocks({ data: { checked: false } })
-      return true
+    if (event.key === 'Enter' && value.startBlock.type === 'check-list-item') {
+      editor.splitBlock().setBlocks({ data: { checked: false } })
+      return
     }
 
     if (
-      event.key == 'Backspace' &&
+      event.key === 'Backspace' &&
       value.isCollapsed &&
-      value.startBlock.type == 'check-list-item' &&
-      value.selection.startOffset == 0
+      value.startBlock.type === 'check-list-item' &&
+      value.selection.startOffset === 0
     ) {
-      change.setBlocks('paragraph')
-      return true
+      editor.setBlocks('paragraph')
+      return
     }
-  }
 
-  /**
-   * Render.
-   *
-   * @return {Element}
-   */
-
-  render() {
-    return (
-      <div>
-        <div className="editor">
-          <Editor
-            spellCheck
-            placeholder="Get to work..."
-            value={this.state.value}
-            onChange={this.onChange}
-            onKeyDown={this.onKeyDown}
-            renderNode={this.renderNode}
-          />
-        </div>
-      </div>
-    )
-  }
-
-  /**
-   * Render a Slate node.
-   *
-   * @param {Object} props
-   * @return {Element}
-   */
-
-  renderNode = props => {
-    switch (props.node.type) {
-      case 'check-list-item':
-        return <CheckListItem {...props} />
-    }
+    next()
   }
 }
 

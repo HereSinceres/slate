@@ -20,11 +20,10 @@ class App extends React.Component {
     this.setState({ value })
   }
 
-  onKeyDown = (event, change) => {
-    if (event.key != '&') return
+  onKeyDown = (event, editor, next) => {
+    if (event.key != '&') return next()
     event.preventDefault()
-    change.insertText('and')
-    return true
+    editor.insertText('and')
   }
 
   render() {
@@ -82,30 +81,31 @@ class App extends React.Component {
     this.setState({ value })
   }
 
-  onKeyDown = (event, change) => {
-    if (event.key != '&') return
+  onKeyDown = (event, editor, next) => {
+    if (event.key != '&') return next()
     event.preventDefault()
-    change.insertText('and')
-    return true
+    editor.insertText('and')
   }
 
   render() {
     return (
-      // Pass in the `renderNode` prop...
+      // Pass in the `renderBlock` prop...
       <Editor
         value={this.state.value}
         onChange={this.onChange}
         onKeyDown={this.onKeyDown}
-        renderNode={this.renderNode}
+        renderBlock={this.renderBlock}
       />
     )
   }
 
-  // Add a `renderNode` method to render a `CodeNode` for code blocks.
-  renderNode = props => {
+  // Add a `renderBlock` method to render a `CodeNode` for code blocks.
+  renderBlock = (props, editor, next) => {
     switch (props.node.type) {
       case 'code':
         return <CodeNode {...props} />
+      default:
+        return next()
     }
   }
 }
@@ -131,16 +131,15 @@ class App extends React.Component {
     this.setState({ value })
   }
 
-  onKeyDown = (event, change) => {
+  onKeyDown = (event, editor, next) => {
     // Return with no changes if it's not the "`" key with ctrl pressed.
-    if (event.key != '`' || !event.ctrlKey) return
+    if (event.key != '`' || !event.ctrlKey) return next()
 
     // Prevent the "`" from being inserted by default.
     event.preventDefault()
 
     // Otherwise, set the currently selected blocks type to "code".
-    change.setBlocks('code')
-    return true
+    editor.setBlocks('code')
   }
 
   render() {
@@ -149,15 +148,17 @@ class App extends React.Component {
         value={this.state.value}
         onChange={this.onChange}
         onKeyDown={this.onKeyDown}
-        renderNode={this.renderNode}
+        renderBlock={this.renderBlock}
       />
     )
   }
 
-  renderNode = props => {
+  renderBlock = (props, editor, next) => {
     switch (props.node.type) {
       case 'code':
         return <CodeNode {...props} />
+      default:
+        return next()
     }
   }
 }
@@ -187,17 +188,16 @@ class App extends React.Component {
     this.setState({ value })
   }
 
-  onKeyDown = (event, change) => {
-    if (event.key != '`' || !event.ctrlKey) return
+  onKeyDown = (event, editor, next) => {
+    if (event.key != '`' || !event.ctrlKey) return next()
 
     event.preventDefault()
 
     // Determine whether any of the currently selected blocks are code blocks.
-    const isCode = change.value.blocks.some(block => block.type == 'code')
+    const isCode = editor.value.blocks.some(block => block.type == 'code')
 
     // Toggle the block type depending on `isCode`.
-    change.setBlocks(isCode ? 'paragraph' : 'code')
-    return true
+    editor.setBlocks(isCode ? 'paragraph' : 'code')
   }
 
   render() {
@@ -206,15 +206,17 @@ class App extends React.Component {
         value={this.state.value}
         onChange={this.onChange}
         onKeyDown={this.onKeyDown}
-        renderNode={this.renderNode}
+        renderBlock={this.renderBlock}
       />
     )
   }
 
-  renderNode = props => {
+  renderBlock = (props, editor, next) => {
     switch (props.node.type) {
       case 'code':
         return <CodeNode {...props} />
+      default:
+        return next()
     }
   }
 }

@@ -4,6 +4,7 @@ import SlateTypes from 'slate-prop-types'
 import Types from 'prop-types'
 
 import Text from './text'
+import DATA_ATTRS from '../constants/data-attributes'
 
 /**
  * Debug.
@@ -58,33 +59,39 @@ class Void extends React.Component {
   render() {
     const { props } = this
     const { children, node, readOnly } = props
-    const Tag = node.object == 'block' ? 'div' : 'span'
+    const Tag = node.object === 'block' ? 'div' : 'span'
     const style = {
       height: '0',
       color: 'transparent',
       outline: 'none',
+      position: 'absolute',
+    }
+
+    const spacerAttrs = {
+      [DATA_ATTRS.SPACER]: true,
     }
 
     const spacer = (
-      <Tag
-        contentEditable
-        data-slate-spacer
-        suppressContentEditableWarning
-        style={style}
-      >
+      <Tag style={style} {...spacerAttrs}>
         {this.renderText()}
       </Tag>
     )
 
-    const content = <Tag draggable={readOnly ? null : true}>{children}</Tag>
+    const content = (
+      <Tag contentEditable={readOnly ? null : false}>{children}</Tag>
+    )
 
     this.debug('render', { props })
 
+    const attrs = {
+      [DATA_ATTRS.VOID]: true,
+      [DATA_ATTRS.KEY]: node.key,
+    }
+
     return (
       <Tag
-        data-slate-void
-        data-key={node.key}
-        contentEditable={readOnly ? null : false}
+        contentEditable={readOnly || node.object === 'block' ? null : false}
+        {...attrs}
       >
         {readOnly ? null : spacer}
         {content}
@@ -105,20 +112,22 @@ class Void extends React.Component {
 
   renderText = () => {
     const {
+      annotations,
       block,
       decorations,
-      isSelected,
       node,
       readOnly,
       editor,
+      textRef,
     } = this.props
     const child = node.getFirstText()
     return (
       <Text
-        block={node.object == 'block' ? node : block}
+        ref={textRef}
+        annotations={annotations}
+        block={node.object === 'block' ? node : block}
         decorations={decorations}
         editor={editor}
-        isSelected={isSelected}
         key={child.key}
         node={child}
         parent={node}

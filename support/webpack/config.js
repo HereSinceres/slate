@@ -6,13 +6,21 @@ const ExtractTextPlugin = require('extract-text-webpack-plugin')
 const CopyWebpackPlugin = require('copy-webpack-plugin')
 const UglifyJSPlugin = require('uglifyjs-webpack-plugin')
 
+const DefinePlugin = webpack.DefinePlugin
 const NamedModulesPlugin = webpack.NamedModulesPlugin
 const HotModuleReplacementPlugin = webpack.HotModuleReplacementPlugin
 const IS_PROD = process.env.NODE_ENV === 'production'
 const IS_DEV = !IS_PROD
 
 const config = {
-  entry: ['react-hot-loader/patch', './examples/index.js'],
+  entry: [
+    'babel-polyfill',
+    // COMPAT: Missing in IE 11 and included separately because babel-polyfill does not support DOM elements:
+    // https://github.com/zloirock/core-js/issues/317
+    'element-closest',
+    'react-hot-loader/patch',
+    './examples/index.js',
+  ],
   output: {
     path: path.resolve(__dirname, '../../build'),
     filename: '[name]-[hash].js',
@@ -22,6 +30,7 @@ const config = {
     contentBase: './examples',
     publicPath: '/',
     hot: true,
+    host: '0.0.0.0',
   },
   module: {
     rules: [
@@ -57,11 +66,26 @@ const config = {
     ],
   },
   plugins: [
+    new DefinePlugin({
+      'process.env.NODE_ENV': JSON.stringify(
+        IS_PROD ? 'production' : 'development'
+      ),
+    }),
     new ExtractTextPlugin('[name]-[contenthash].css'),
     new HtmlWebpackPlugin({
       title: 'Slate',
       template: HtmlWebpackTemplate,
       inject: false,
+      // Note: this is not the correct format meta for HtmlWebpackPlugin, which
+      // accepts a single object of key=name and value=content. We need to
+      // format it this way for HtmlWebpackTemplate which expects an array of
+      // objects instead.
+      meta: [
+        {
+          name: 'viewport',
+          content: 'width=device-width, initial-scale=1',
+        },
+      ],
       links: [
         'https://fonts.googleapis.com/css?family=Roboto:400,400i,700,700i&subset=latin-ext',
         'https://fonts.googleapis.com/icon?family=Material+Icons',

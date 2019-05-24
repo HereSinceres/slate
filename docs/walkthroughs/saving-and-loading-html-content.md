@@ -10,13 +10,14 @@ Let's start with a basic editor:
 
 ```js
 import { Editor } from 'slate-react'
+import Plain from 'slate-plain-serializer'
 
 class App extends React.Component {
   state = {
     value: Plain.deserialize(''),
   }
 
-  onChange({ value }) {
+  onChange = ({ value }) => {
     this.setState({ value })
   }
 
@@ -28,14 +29,14 @@ class App extends React.Component {
 
 That will render a basic Slate editor on your page.
 
-Now... we need to add the [`Html`](../reference/serializers/html.md) serializer. And to do that, we need to tell it a bit about the schema we plan on using. For this example, we'll work with a schema that has a few different parts:
+Now... we need to add the [`Html`](../reference/slate-html-serializer/index.md) serializer. And to do that, we need to tell it a bit about the schema we plan on using. For this example, we'll work with a schema that has a few different parts:
 
 * A `paragraph` block.
 * A `code` block for code samples.
 * A `quote` block for quotes...
 * And `bold`, `italic` and `underline` formatting.
 
-By default, the `Html` serializer, knows nothing about our schema just like Slate itself. To fix this, we need to pass it a set of `rules`. Each rule defines how to serialize and deserialize a Slate object.
+By default, the `Html` serializer knows nothing about our schema, just like Slate itself. To fix this, we need to pass it a set of `rules`. Each rule defines how to serialize and deserialize a Slate object.
 
 To start, let's create a new rule with a `deserialize` function for paragraph blocks.
 
@@ -48,6 +49,9 @@ const rules = [
         return {
           object: 'block',
           type: 'paragraph',
+          data: {
+            className: el.getAttribute('class'),
+          },
           nodes: next(el.childNodes),
         }
       }
@@ -68,6 +72,9 @@ const rules = [
         return {
           object: 'block',
           type: 'paragraph',
+          data: {
+            className: el.getAttribute('class'),
+          },
           nodes: next(el.childNodes),
         }
       }
@@ -75,7 +82,7 @@ const rules = [
     // Add a serializing function property to our rule...
     serialize(obj, children) {
       if (obj.object == 'block' && obj.type == 'paragraph') {
-        return <p>{children}</p>
+        return <p className={obj.data.get('className')}>{children}</p>
       }
     },
   },
@@ -103,27 +110,32 @@ const rules = [
     // Switch deserialize to handle more blocks...
     deserialize(el, next) {
       const type = BLOCK_TAGS[el.tagName.toLowerCase()]
-      if (!type) return
-      return {
-        object: 'block',
-        type: type,
-        nodes: next(el.childNodes),
+      if (type) {
+        return {
+          object: 'block',
+          type: type,
+          data: {
+            className: el.getAttribute('class'),
+          },
+          nodes: next(el.childNodes),
+        }
       }
     },
     // Switch serialize to handle more blocks...
     serialize(obj, children) {
-      if (obj.object != 'block') return
-      switch (obj.type) {
-        case 'paragraph':
-          return <p>{children}</p>
-        case 'quote':
-          return <blockquote>{children}</blockquote>
-        case 'code':
-          return (
-            <pre>
-              <code>{children}</code>
-            </pre>
-          )
+      if (obj.object == 'block') {
+        switch (obj.type) {
+          case 'paragraph':
+            return <p className={obj.data.get('className')}>{children}</p>
+          case 'quote':
+            return <blockquote>{children}</blockquote>
+          case 'code':
+            return (
+              <pre>
+                <code>{children}</code>
+              </pre>
+            )
+        }
       }
     },
   },
@@ -154,26 +166,31 @@ const rules = [
   {
     deserialize(el, next) {
       const type = BLOCK_TAGS[el.tagName.toLowerCase()]
-      if (!type) return
-      return {
-        object: 'block',
-        type: type,
-        nodes: next(el.childNodes),
+      if (type) {
+        return {
+          object: 'block',
+          type: type,
+          data: {
+            className: el.getAttribute('class'),
+          },
+          nodes: next(el.childNodes),
+        }
       }
     },
     serialize(obj, children) {
-      if (obj.object != 'block') return
-      switch (obj.type) {
-        case 'code':
-          return (
-            <pre>
-              <code>{children}</code>
-            </pre>
-          )
-        case 'paragraph':
-          return <p>{children}</p>
-        case 'quote':
-          return <blockquote>{children}</blockquote>
+      if (obj.object == 'block') {
+        switch (obj.type) {
+          case 'code':
+            return (
+              <pre>
+                <code>{children}</code>
+              </pre>
+            )
+          case 'paragraph':
+            return <p className={obj.data.get('className')}>{children}</p>
+          case 'quote':
+            return <blockquote>{children}</blockquote>
+        }
       }
     },
   },
@@ -181,22 +198,24 @@ const rules = [
   {
     deserialize(el, next) {
       const type = MARK_TAGS[el.tagName.toLowerCase()]
-      if (!type) return
-      return {
-        object: 'mark',
-        type: type,
-        nodes: next(el.childNodes),
+      if (type) {
+        return {
+          object: 'mark',
+          type: type,
+          nodes: next(el.childNodes),
+        }
       }
     },
     serialize(obj, children) {
-      if (obj.object != 'mark') return
-      switch (obj.type) {
-        case 'bold':
-          return <strong>{children}</strong>
-        case 'italic':
-          return <em>{children}</em>
-        case 'underline':
-          return <u>{children}</u>
+      if (obj.object == 'mark') {
+        switch (obj.type) {
+          case 'bold':
+            return <strong>{children}</strong>
+          case 'italic':
+            return <em>{children}</em>
+          case 'underline':
+            return <u>{children}</u>
+        }
       }
     },
   },
@@ -239,13 +258,13 @@ class App extends React.Component {
         value={this.state.value}
         onChange={this.onChange}
         // Add the ability to render our nodes and marks...
-        renderNode={this.renderNode}
+        renderBlock={this.renderNode}
         renderMark={this.renderMark}
       />
     )
   }
 
-  renderNode = props => {
+  renderNode = (props, editor, next) => {
     switch (props.node.type) {
       case 'code':
         return (
@@ -254,21 +273,30 @@ class App extends React.Component {
           </pre>
         )
       case 'paragraph':
-        return <p {...props.attributes}>{props.children}</p>
+        return (
+          <p {...props.attributes} className={props.node.data.get('className')}>
+            {props.children}
+          </p>
+        )
       case 'quote':
         return <blockquote {...props.attributes}>{props.children}</blockquote>
+      default:
+        return next()
     }
   }
 
   // Add a `renderMark` method to render marks.
-  renderMark = props => {
-    switch (props.mark.type) {
+  renderMark = (props, editor, next) => {
+    const { mark, attributes } = props
+    switch (mark.type) {
       case 'bold':
-        return <strong>{props.children}</strong>
+        return <strong {...attributes}>{props.children}</strong>
       case 'italic':
-        return <em>{props.children}</em>
+        return <em {...attributes}>{props.children}</em>
       case 'underline':
-        return <u>{props.children}</u>
+        return <u {...attributes}>{props.children}</u>
+      default:
+        return next()
     }
   }
 }

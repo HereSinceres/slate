@@ -2,78 +2,95 @@ import { Editor } from 'slate-react'
 import { Value } from 'slate'
 
 import React from 'react'
-import initialValue from './value.json'
+import initialValueAsJson from './value.json'
+import { css } from 'emotion'
+import { Icon, Toolbar } from '../components'
 
 /**
- * The rich text example.
+ * Get a unique key for the search highlight annotations.
+ *
+ * @return {String}
+ */
+
+let n = 0
+
+function getHighlightKey() {
+  return `highlight_${n++}`
+}
+
+/**
+ * Deserialize the initial editor value.
+ *
+ * @type {Object}
+ */
+
+const initialValue = Value.fromJSON(initialValueAsJson)
+
+/**
+ * Some styled components for the search box.
+ *
+ * @type {Component}
+ */
+
+const SearchWrapper = props => (
+  <div
+    {...props}
+    className={css`
+      position: relative;
+    `}
+  />
+)
+
+const SearchIcon = props => (
+  <Icon
+    {...props}
+    className={css`
+      position: absolute;
+      top: 0.5em;
+      left: 0.5em;
+      color: #ccc;
+    `}
+  />
+)
+
+const SearchInput = props => (
+  <input
+    {...props}
+    className={css`
+      padding-left: 2em;
+      width: 100%;
+    `}
+  />
+)
+
+/**
+ * The search highlighting example.
  *
  * @type {Component}
  */
 
 class SearchHighlighting extends React.Component {
   /**
-   * Deserialize the initial editor value.
+   * The editor's schema.
    *
    * @type {Object}
    */
 
-  state = {
-    value: Value.fromJSON(initialValue),
+  schema = {
+    annotations: {
+      highlight: {
+        isAtomic: true,
+      },
+    },
   }
 
   /**
-   * On change, save the new `value`.
+   * Store a reference to the `editor`.
    *
-   * @param {Change} change
+   * @param {Editor} editor
    */
 
-  onChange = ({ value }) => {
-    this.setState({ value })
-  }
-
-  /**
-   * On input change, update the decorations.
-   *
-   * @param {Event} event
-   */
-
-  onInputChange = event => {
-    const { value } = this.state
-    const string = event.target.value
-    const texts = value.document.getTexts()
-    const decorations = []
-
-    texts.forEach(node => {
-      const { key, text } = node
-      const parts = text.split(string)
-      let offset = 0
-
-      parts.forEach((part, i) => {
-        if (i != 0) {
-          decorations.push({
-            anchorKey: key,
-            anchorOffset: offset - string.length,
-            focusKey: key,
-            focusOffset: offset,
-            marks: [{ type: 'highlight' }],
-          })
-        }
-
-        offset = offset + part.length + string.length
-      })
-    })
-
-    // setting the `save` option to false prevents this change from being added
-    // to the undo/redo stack and clearing the redo stack if the user has undone
-    // changes.
-
-    const change = value
-      .change()
-      .setOperationFlag('save', false)
-      .setValue({ decorations })
-      .setOperationFlag('save', true)
-    this.onChange(change)
-  }
+  ref = React.createRef()
 
   /**
    * Render.
@@ -84,48 +101,22 @@ class SearchHighlighting extends React.Component {
   render() {
     return (
       <div>
-        {this.renderToolbar()}
-        {this.renderEditor()}
-      </div>
-    )
-  }
-
-  /**
-   * Render the toolbar.
-   *
-   * @return {Element}
-   */
-
-  renderToolbar = () => {
-    return (
-      <div className="menu toolbar-menu">
-        <div className="search">
-          <span className="search-icon material-icons">search</span>
-          <input
-            className="search-box"
-            type="search"
-            placeholder="Search the text..."
-            onChange={this.onInputChange}
-          />
-        </div>
-      </div>
-    )
-  }
-
-  /**
-   * Render the Slate editor.
-   *
-   * @return {Element}
-   */
-
-  renderEditor = () => {
-    return (
-      <div className="editor">
+        <Toolbar>
+          <SearchWrapper>
+            <SearchIcon>search</SearchIcon>
+            <SearchInput
+              type="search"
+              placeholder="Search the text..."
+              onChange={this.onInputChange}
+            />
+          </SearchWrapper>
+        </Toolbar>
         <Editor
           placeholder="Enter some rich text..."
-          value={this.state.value}
-          onChange={this.onChange}
-          renderMark={this.renderMark}
+          ref={this.ref}
+          defaultValue={initialValue}
+          schema={this.schema}
+          renderAnnotation={this.renderAnnotation}
           spellCheck
         />
       </div>
@@ -133,18 +124,67 @@ class SearchHighlighting extends React.Component {
   }
 
   /**
-   * Render a Slate mark.
+   * Render a Slate annotation.
    *
    * @param {Object} props
    * @return {Element}
    */
 
-  renderMark = props => {
-    const { children, mark } = props
-    switch (mark.type) {
+  renderAnnotation = (props, editor, next) => {
+    const { children, annotation, attributes } = props
+
+    switch (annotation.type) {
       case 'highlight':
-        return <span style={{ backgroundColor: '#ffeeba' }}>{children}</span>
+        return (
+          <span {...attributes} style={{ backgroundColor: '#ffeeba' }}>
+            {children}
+          </span>
+        )
+      default:
+        return next()
     }
+  }
+
+  /**
+   * On input change, update the annotations.
+   *
+   * @param {Event} event
+   */
+
+  onInputChange = event => {
+    const editor = this.ref.current
+    const { value } = editor
+    const { document, annotations } = value
+    const string = event.target.value
+
+    // Make the change to annotations without saving it into the undo history,
+    // so that there isn't a confusing behavior when undoing.
+    editor.withoutSaving(() => {
+      annotations.forEach(ann => {
+        if (ann.type === 'highlight') {
+          editor.removeAnnotation(ann)
+        }
+      })
+
+      for (const [node, path] of document.texts()) {
+        const { key, text } = node
+        const parts = text.split(string)
+        let offset = 0
+
+        parts.forEach((part, i) => {
+          if (i !== 0) {
+            editor.addAnnotation({
+              key: getHighlightKey(),
+              type: 'highlight',
+              anchor: { path, key, offset: offset - string.length },
+              focus: { path, key, offset },
+            })
+          }
+
+          offset = offset + part.length + string.length
+        })
+      }
+    })
   }
 }
 

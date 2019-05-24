@@ -3,7 +3,16 @@ import { Value } from 'slate'
 
 import Prism from 'prismjs'
 import React from 'react'
-import initialValue from './value.json'
+
+import initialValueAsJson from './value.json'
+
+/**
+ * Deserialize the initial editor value.
+ *
+ * @type {Object}
+ */
+
+const initialValue = Value.fromJSON(initialValueAsJson)
 
 /**
  * Define our code components.
@@ -17,9 +26,7 @@ function CodeBlock(props) {
   const language = node.data.get('language')
 
   function onChange(event) {
-    editor.change(c =>
-      c.setNodeByKey(node.key, { data: { language: event.target.value } })
-    )
+    editor.setNodeByKey(node.key, { data: { language: event.target.value } })
   }
 
   return (
@@ -46,6 +53,23 @@ function CodeBlockLine(props) {
 }
 
 /**
+ * A helper function to return the content of a Prism `token`.
+ *
+ * @param {Object} token
+ * @return {String}
+ */
+
+function getContent(token) {
+  if (typeof token === 'string') {
+    return token
+  } else if (typeof token.content === 'string') {
+    return token.content
+  } else {
+    return token.content.map(getContent).join('')
+  }
+}
+
+/**
  * The code highlighting example.
  *
  * @type {Component}
@@ -53,110 +77,100 @@ function CodeBlockLine(props) {
 
 class CodeHighlighting extends React.Component {
   /**
-   * Deserialize the raw initial value.
+   * Render.
    *
-   * @type {Object}
+   * @return {Component}
    */
 
-  state = {
-    value: Value.fromJSON(initialValue),
+  render() {
+    return (
+      <Editor
+        placeholder="Write some code..."
+        defaultValue={initialValue}
+        onKeyDown={this.onKeyDown}
+        renderBlock={this.renderBlock}
+        renderDecoration={this.renderDecoration}
+        decorateNode={this.decorateNode}
+      />
+    )
   }
 
   /**
-   * On change, save the new value.
+   * Render a Slate block.
    *
-   * @param {Change} change
+   * @param {Object} props
+   * @return {Element}
    */
 
-  onChange = ({ value }) => {
-    this.setState({ value })
+  renderBlock = (props, editor, next) => {
+    switch (props.node.type) {
+      case 'code':
+        return <CodeBlock {...props} />
+      case 'code_line':
+        return <CodeBlockLine {...props} />
+      default:
+        return next()
+    }
+  }
+
+  /**
+   * Render a Slate decoration.
+   *
+   * @param {Object} props
+   * @return {Element}
+   */
+
+  renderDecoration = (props, editor, next) => {
+    const { children, decoration, attributes } = props
+
+    switch (decoration.type) {
+      case 'comment':
+        return (
+          <span {...attributes} style={{ opacity: '0.33' }}>
+            {children}
+          </span>
+        )
+      case 'keyword':
+        return (
+          <span {...attributes} style={{ fontWeight: 'bold' }}>
+            {children}
+          </span>
+        )
+      case 'tag':
+        return (
+          <span {...attributes} style={{ fontWeight: 'bold' }}>
+            {children}
+          </span>
+        )
+      case 'punctuation':
+        return (
+          <span {...attributes} style={{ opacity: '0.75' }}>
+            {children}
+          </span>
+        )
+      default:
+        return next()
+    }
   }
 
   /**
    * On key down inside code blocks, insert soft new lines.
    *
    * @param {Event} event
-   * @param {Change} change
-   * @return {Change}
+   * @param {Editor} editor
+   * @param {Function} next
    */
 
-  onKeyDown = (event, change) => {
-    const { value } = change
+  onKeyDown = (event, editor, next) => {
+    const { value } = editor
     const { startBlock } = value
-    if (event.key != 'Enter') return
-    if (startBlock.type != 'code') return
-    if (value.isExpanded) change.delete()
-    change.insertText('\n')
-    return true
-  }
 
-  /**
-   * Render.
-   *
-   * @return {Component}
-   */
-
-  render = () => {
-    return (
-      <div className="editor">
-        <Editor
-          placeholder="Write some code..."
-          value={this.state.value}
-          onChange={this.onChange}
-          onKeyDown={this.onKeyDown}
-          renderNode={this.renderNode}
-          renderMark={this.renderMark}
-          decorateNode={this.decorateNode}
-        />
-      </div>
-    )
-  }
-
-  /**
-   * Render a Slate node.
-   *
-   * @param {Object} props
-   * @return {Element}
-   */
-
-  renderNode = props => {
-    switch (props.node.type) {
-      case 'code':
-        return <CodeBlock {...props} />
-      case 'code_line':
-        return <CodeBlockLine {...props} />
+    if (event.key === 'Enter' && startBlock.type === 'code') {
+      editor.insertText('\n')
+      return
     }
-  }
 
-  /**
-   * Render a Slate mark.
-   *
-   * @param {Object} props
-   * @return {Element}
-   */
-
-  renderMark = props => {
-    const { children, mark } = props
-    switch (mark.type) {
-      case 'comment':
-        return <span style={{ opacity: '0.33' }}>{children}</span>
-      case 'keyword':
-        return <span style={{ fontWeight: 'bold' }}>{children}</span>
-      case 'tag':
-        return <span style={{ fontWeight: 'bold' }}>{children}</span>
-      case 'punctuation':
-        return <span style={{ opacity: '0.75' }}>{children}</span>
-    }
-  }
-
-  tokenToContent = token => {
-    if (typeof token == 'string') {
-      return token
-    } else if (typeof token.content == 'string') {
-      return token.content
-    } else {
-      return token.content.map(this.tokenToContent).join('')
-    }
+    next()
   }
 
   /**
@@ -166,26 +180,28 @@ class CodeHighlighting extends React.Component {
    * @return {Array}
    */
 
-  decorateNode = node => {
-    if (node.type != 'code') return
+  decorateNode = (node, editor, next) => {
+    const others = next() || []
+    if (node.type !== 'code') return others
 
     const language = node.data.get('language')
-    const texts = node.getTexts().toArray()
-    const string = texts.map(t => t.text).join('\n')
+    const texts = Array.from(node.texts())
+    const string = texts.map(([n]) => n.text).join('\n')
     const grammar = Prism.languages[language]
     const tokens = Prism.tokenize(string, grammar)
     const decorations = []
-    let startText = texts.shift()
-    let endText = startText
+    let startEntry = texts.shift()
+    let endEntry = startEntry
     let startOffset = 0
     let endOffset = 0
     let start = 0
 
     for (const token of tokens) {
-      startText = endText
+      startEntry = endEntry
       startOffset = endOffset
 
-      const content = this.tokenToContent(token)
+      const [startText, startPath] = startEntry
+      const content = getContent(token)
       const newlines = content.split('\n').length - 1
       const length = content.length - newlines
       const end = start + length
@@ -196,28 +212,37 @@ class CodeHighlighting extends React.Component {
       endOffset = startOffset + remaining
 
       while (available < remaining && texts.length > 0) {
-        endText = texts.shift()
+        endEntry = texts.shift()
+        const [endText] = endEntry
         remaining = length - available
         available = endText.text.length
         endOffset = remaining
       }
 
-      if (typeof token != 'string') {
-        const range = {
-          anchorKey: startText.key,
-          anchorOffset: startOffset,
-          focusKey: endText.key,
-          focusOffset: endOffset,
-          marks: [{ type: token.type }],
+      const [endText, endPath] = endEntry
+
+      if (typeof token !== 'string') {
+        const dec = {
+          type: token.type,
+          anchor: {
+            key: startText.key,
+            path: startPath,
+            offset: startOffset,
+          },
+          focus: {
+            key: endText.key,
+            path: endPath,
+            offset: endOffset,
+          },
         }
 
-        decorations.push(range)
+        decorations.push(dec)
       }
 
       start = end
     }
 
-    return decorations
+    return [...others, ...decorations]
   }
 }
 

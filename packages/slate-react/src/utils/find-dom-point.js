@@ -1,35 +1,47 @@
 import findDOMNode from './find-dom-node'
+import warning from 'tiny-warning'
+
+import DATA_ATTRS from '../constants/data-attributes'
+import SELECTORS from '../constants/selectors'
 
 /**
- * Find a native DOM selection point from a Slate `key` and `offset`.
+ * Find a native DOM selection point from a Slate `point`.
  *
- * @param {String} key
- * @param {Number} offset
+ * @param {Point} point
  * @param {Window} win (optional)
  * @return {Object|Null}
  */
 
-function findDOMPoint(key, offset, win = window) {
-  const el = findDOMNode(key, win)
-  let start = 0
-  let n
-
-  // COMPAT: In IE, this method's arguments are not optional, so we have to
-  // pass in all four even though the last two are defaults. (2017/10/25)
-  const iterator = win.document.createNodeIterator(
-    el,
-    NodeFilter.SHOW_TEXT,
-    () => NodeFilter.FILTER_ACCEPT,
-    false
+function findDOMPoint(point, win = window) {
+  warning(
+    false,
+    'As of slate-react@0.22 the `findDOMPoint(point)` helper is deprecated in favor of `editor.findDOMPoint(point)`.'
   )
 
-  while ((n = iterator.nextNode())) {
-    const { length } = n.textContent
-    const end = start + length
+  const el = findDOMNode(point.key, win)
+  let start = 0
 
-    if (offset <= end) {
-      const o = offset - start
-      return { node: n, offset: o }
+  // For each leaf, we need to isolate its content, which means filtering to its
+  // direct text and zero-width spans. (We have to filter out any other siblings
+  // that may have been rendered alongside them.)
+  const texts = Array.from(
+    el.querySelectorAll(`${SELECTORS.STRING}, ${SELECTORS.ZERO_WIDTH}`)
+  )
+
+  for (const text of texts) {
+    const node = text.childNodes[0]
+    const domLength = node.textContent.length
+    let slateLength = domLength
+
+    if (text.hasAttribute(DATA_ATTRS.LENGTH)) {
+      slateLength = parseInt(text.getAttribute(DATA_ATTRS.LENGTH), 10)
+    }
+
+    const end = start + slateLength
+
+    if (point.offset <= end) {
+      const offset = Math.min(domLength, Math.max(0, point.offset - start))
+      return { node, offset }
     }
 
     start = end

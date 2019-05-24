@@ -2,7 +2,17 @@ import { Editor } from 'slate-react'
 import { Value } from 'slate'
 
 import React from 'react'
-import initialValue from './value.json'
+import initialValueAsJson from './value.json'
+import { css } from 'emotion'
+import { Button, Icon, Toolbar } from '../components'
+
+/**
+ * Deserialize the initial editor value.
+ *
+ * @type {Object}
+ */
+
+const initialValue = Value.fromJSON(initialValueAsJson)
 
 /**
  * Emojis.
@@ -27,17 +37,8 @@ const EMOJIS = [
   '👻',
   '🍔',
   '🍑',
-  '🍆',
   '🔑',
 ]
-
-/**
- * No ops.
- *
- * @type {Function}
- */
-
-const noop = e => e.preventDefault()
 
 /**
  * The links example.
@@ -47,23 +48,106 @@ const noop = e => e.preventDefault()
 
 class Emojis extends React.Component {
   /**
-   * Deserialize the raw initial value.
+   * The editor's schema.
    *
    * @type {Object}
    */
 
-  state = {
-    value: Value.fromJSON(initialValue),
+  schema = {
+    inlines: {
+      emoji: {
+        isVoid: true,
+      },
+    },
   }
 
   /**
-   * On change.
+   * Store a reference to the `editor`.
    *
-   * @param {Change} change
+   * @param {Editor} editor
    */
 
-  onChange = ({ value }) => {
-    this.setState({ value })
+  ref = editor => {
+    this.editor = editor
+  }
+
+  /**
+   * Render the app.
+   *
+   * @return {Element} element
+   */
+
+  render() {
+    return (
+      <div>
+        <Toolbar>
+          {EMOJIS.map((emoji, i) => (
+            <Button key={i} onMouseDown={e => this.onClickEmoji(e, emoji)}>
+              <Icon>{emoji}</Icon>
+            </Button>
+          ))}
+        </Toolbar>
+        <Editor
+          placeholder="Write some 😍👋🎉..."
+          ref={this.ref}
+          defaultValue={initialValue}
+          schema={this.schema}
+          renderBlock={this.renderBlock}
+          renderInline={this.renderInline}
+        />
+      </div>
+    )
+  }
+
+  /**
+   * Render a Slate block.
+   *
+   * @param {Object} props
+   * @param {Editor} editor
+   * @param {Function} next
+   * @return {Element}
+   */
+
+  renderBlock = (props, editor, next) => {
+    const { attributes, children, node } = props
+
+    switch (node.type) {
+      case 'paragraph':
+        return <p {...attributes}>{children}</p>
+      default:
+        return next()
+    }
+  }
+
+  /**
+   * Render a Slate inline.
+   *
+   * @param {Object} props
+   * @param {Editor} editor
+   * @param {Function} next
+   * @return {Element}
+   */
+
+  renderInline = (props, editor, next) => {
+    const { attributes, node, isFocused } = props
+
+    switch (node.type) {
+      case 'emoji':
+        return (
+          <span
+            {...attributes}
+            contentEditable={false}
+            onDrop={e => e.preventDefault()}
+            className={css`
+              outline: ${isFocused ? '2px solid blue' : 'none'};
+            `}
+          >
+            {node.data.get('code')}
+          </span>
+        )
+      default:
+        return next()
+    }
   }
 
   /**
@@ -74,105 +158,11 @@ class Emojis extends React.Component {
 
   onClickEmoji = (e, code) => {
     e.preventDefault()
-    const { value } = this.state
-    const change = value.change()
 
-    change
-      .insertInline({
-        type: 'emoji',
-        isVoid: true,
-        data: { code },
-      })
-      .collapseToStartOfNextText()
+    this.editor
+      .insertInline({ type: 'emoji', data: { code } })
+      .moveToStartOfNextText()
       .focus()
-
-    this.onChange(change)
-  }
-
-  /**
-   * Render the app.
-   *
-   * @return {Element} element
-   */
-
-  render = () => {
-    return (
-      <div>
-        {this.renderToolbar()}
-        {this.renderEditor()}
-      </div>
-    )
-  }
-
-  /**
-   * Render the toolbar.
-   *
-   * @return {Element} element
-   */
-
-  renderToolbar = () => {
-    return (
-      <div className="menu toolbar-menu">
-        {EMOJIS.map((emoji, i) => {
-          const onMouseDown = e => this.onClickEmoji(e, emoji)
-          return (
-            // eslint-disable-next-line react/jsx-no-bind
-            <span key={i} className="button" onMouseDown={onMouseDown}>
-              <span className="material-icons">{emoji}</span>
-            </span>
-          )
-        })}
-      </div>
-    )
-  }
-
-  /**
-   * Render the editor.
-   *
-   * @return {Element} element
-   */
-
-  renderEditor = () => {
-    return (
-      <div className="editor">
-        <Editor
-          placeholder="Write some 😍👋🎉..."
-          value={this.state.value}
-          onChange={this.onChange}
-          renderNode={this.renderNode}
-        />
-      </div>
-    )
-  }
-
-  /**
-   * Render a Slate node.
-   *
-   * @param {Object} props
-   * @return {Element}
-   */
-
-  renderNode = props => {
-    const { attributes, children, node, isSelected } = props
-    switch (node.type) {
-      case 'paragraph': {
-        return <p {...attributes}>{children}</p>
-      }
-      case 'emoji': {
-        const { data } = node
-        const code = data.get('code')
-        return (
-          <span
-            className={`emoji ${isSelected ? 'selected' : ''}`}
-            {...props.attributes}
-            contentEditable={false}
-            onDrop={noop}
-          >
-            {code}
-          </span>
-        )
-      }
-    }
   }
 }
 
